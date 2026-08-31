@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<!-- 핵심 해결 방법: 모바일 웹페이지 전체가 확대되는 것을 막고 커스텀 터치만 허용하는 설정 -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>모바일 다이어리 앱</title>
+<style>
+  body { margin: 0; font-family: 'Malgun Gothic', sans-serif; background-color: #ffffff; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; }
+  .header-icon { font-size: 28px; color: #4a78c9; cursor: pointer; font-weight: bold; }
+  .header-date { background-color: #4a78c9; color: white; padding: 10px 40px; font-size: 16px; border-radius: 4px; }
+
+  .content { flex: 1; padding: 15px 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; overflow-x: hidden; }
+
+  .main-card {
+    background-color: #4a78c9; color: white; border-radius: 20px; min-height: 220px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.4s ease-in-out; padding: 20px; box-sizing: border-box; flex: none; 
+  }
+  
+  .main-card.expanded { flex: 1; justify-content: flex-start; }
+  .main-card-title { font-size: 18px; margin-bottom: 8px; }
+  .main-card-subtitle { font-size: 14px; opacity: 0.9; }
+  
+  #diaryEditor {
+    width: 100%; border: none; border-radius: 10px; padding: 15px; font-family: inherit; font-size: 16px; box-sizing: border-box; display: none; flex: 1; background-color: rgba(255, 255, 255, 0.9); overflow-y: auto; text-align: left; color: black; outline: none; line-height: 1.5;
+  }
+  
+  #diaryEditor:empty:before { content: attr(placeholder); color: #888; pointer-events: none; }
+
+  /* 사진 터치 최적화 스타일 */
+  .diary-img {
+    max-width: 100%; 
+    max-height: 300px; 
+    display: block; 
+    margin: 15px auto; 
+    border-radius: 10px; 
+    touch-action: none; /* 브라우저 기본 터치 동작(스크롤 등) 무시 */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
+    transform-origin: center center;
+    user-select: none; 
+    -webkit-user-drag: none; 
+    -webkit-touch-callout: none; /* 아이폰에서 길게 눌렀을 때 메뉴 뜨는 것 방지 */
+  }
+
+  #btnContainer { display: none; justify-content: flex-end; }
+  .camera-btn { background-color: #f7813a; color: white; border: none; border-radius: 4px; padding: 12px 20px; font-size: 16px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
+  .calendar-card {
+    background-color: #4a78c9; color: white; display: flex; flex-direction: column; align-items: center; padding-bottom: 15px; cursor: pointer; transition: all 0.4s ease-in-out; flex: 1; min-height: 250px;
+  }
+  .calendar-card.week-view { flex: none; min-height: 120px; }
+  .calendar-label { background-color: black; color: white; padding: 12px 25px; margin-top: 0; font-size: 14px; width: 100%; text-align: center; box-sizing: border-box; }
+  
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 90%; margin-top: 15px; text-align: center; }
+  .cal-day-header { font-size: 14px; font-weight: bold; color: #ffd700; }
+  .cal-day { font-size: 14px; padding: 5px 0; border-radius: 50%; }
+  .cal-day.today { font-weight: bold; text-decoration: underline; background-color: rgba(255,255,255,0.3); }
+
+  .bottom-nav { display: flex; background-color: black; color: white; height: 65px; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+  .bottom-nav.active { opacity: 1; pointer-events: auto; }
+  .nav-item { flex: 1; display: flex; justify-content: center; align-items: center; font-size: 15px; cursor: pointer; }
+  .nav-item.home { background-color: #4a78c9; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-icon">☰</div>
+    <div class="header-date" id="headerDate">YYYY.MM.DD</div>
+    <div class="header-icon">🔍</div>
+  </div>
+
+  <div class="content">
+    <div class="main-card" id="mainCard" onclick="activateInput()">
+      <div id="cardText">
+        <div class="main-card-title">오늘은 뭘 하셨나요...?</div>
+        <div class="main-card-subtitle">(클릭 시 글쓰기 모드 켜짐)</div>
+      </div>
+      <div id="diaryEditor" contenteditable="true" placeholder="사진을 넣고 두 손가락으로 자유롭게 편집해 보세요!"></div>
+    </div>
+    
+    <div id="btnContainer">
+      <input type="file" id="fileInput" accept="image/*" style="display: none;">
+      <button class="camera-btn" onclick="document.getElementById('fileInput').click()">사진 추가하기</button>
+    </div>
+
+    <div class="calendar-card" id="calendarCard">
+      <div class="calendar-label" id="calendarLabel">이번 달 달력</div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+  </div>
+
+  <div class="bottom-nav" id="bottomNav">
+    <div class="nav-item">달력</div>
+    <div class="nav-item home">홈버튼 이미지</div>
+    <div class="nav-item">앨범</div>
+  </div>
+
+  <script>
+    const today = new Date();
+    document.getElementById('headerDate').innerText = `${today.getFullYear()}.${today.getMonth() + 1}.${today.getDate()}`;
+    let isMonthView = true;
+
+    function activateInput() {
+      document.getElementById('bottomNav').classList.add('active');
+      document.getElementById('cardText').style.display = 'none';
+      
+      const editor = document.getElementById('diaryEditor');
+      editor.style.display = 'block';
+      editor.focus();
+      
+      document.getElementById('btnContainer').style.display = 'flex';
+      document.getElementById('mainCard').onclick = null;
+      forceExpandEditor(); 
+    }
+
+    function forceExpandEditor() {
+      if (isMonthView) {
+        isMonthView = false;
+        renderCalendar();
+      }
+    }
+
+    document.getElementById('diaryEditor').addEventListener('click', forceExpandEditor);
+    document.getElementById('diaryEditor').addEventListener('focus', forceExpandEditor);
+
+    const fileInput = document.getElementById('fileInput');
+    fileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          const img = document.createElement('img');
+          img.src = event.target.result;
+          img.className = 'diary-img';
+          
+          img.setAttribute('data-scale', '1');
+          img.setAttribute('data-rot', '0');
+          img.contentEditable = "false"; 
+          
+          const editor = document.getElementById('diaryEditor');
+          editor.appendChild(img);
+          
+          const br = document.createElement('br');
+          editor.appendChild(br);
+          
+          addTouchGestures(img); 
+          forceExpandEditor(); 
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    function addTouchGestures(img) {
+      let initDist = 0, initRot = 0;
+      let startScale = 1, startRot = 0;
+
+      const getDistance = (touches) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+      const getAngle = (touches) => Math.atan2(touches[1].clientY - touches[0].clientY, touches[1].clientX - touches[0].clientX) * 180 / Math.PI;
+
+      // 터치 시작 시점
+      img.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          e.preventDefault(); 
+          e.stopPropagation(); // 글쓰기 창이 터치를 빼앗아 가는 것을 강력히 차단
+          
+          initDist = getDistance(e.touches);
+          initRot = getAngle(e.touches);
+          startScale = parseFloat(img.getAttribute('data-scale')) || 1;
+          startRot = parseFloat(img.getAttribute('data-rot')) || 0;
+        }
+      }, { passive: false });
+
+      // 터치로 움직이는 시점
+      img.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const currDist = getDistance(e.touches);
+          const currRot = getAngle(e.touches);
+
+          // 크기 조절 (너무 작아지거나 커지지 않게 제한)
+          let scale = startScale * (currDist / initDist);
+          scale = Math.max(0.4, Math.min(scale, 3.0)); 
+          
+          // 회전 조절
+          let rotation = startRot + (currRot - initRot);
+
+          img.style.transform = `scale(${scale}) rotate(${rotation}deg)`;
+          img.setAttribute('data-scale', scale);
+          img.setAttribute('data-rot', rotation);
+        }
+      }, { passive: false });
+
+      // PC 마우스 테스트용 (기존과 동일)
+      img.addEventListener('wheel', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        let scale = parseFloat(img.getAttribute('data-scale')) || 1;
+        let rot = parseFloat(img.getAttribute('data-rot')) || 0;
+        if (e.deltaY < 0) scale += 0.1; else scale -= 0.1;
+        scale = Math.max(0.4, Math.min(scale, 3.0));
+        img.style.transform = `scale(${scale}) rotate(${rot}deg)`;
+        img.setAttribute('data-scale', scale);
+      }, { passive: false });
+
+      img.addEventListener('dblclick', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        let scale = parseFloat(img.getAttribute('data-scale')) || 1;
+        let rot = parseFloat(img.getAttribute('data-rot')) || 0;
+        rot += 90;
+        img.style.transform = `scale(${scale}) rotate(${rot}deg)`;
+        img.setAttribute('data-rot', rot);
+      });
+    }
+
+    // 달력 그리기 로직
+    function renderCalendar() {
+      const grid = document.getElementById('calendarGrid');
+      const mainCard = document.getElementById('mainCard');
+      const calendarCard = document.getElementById('calendarCard');
+      
+      grid.innerHTML = ''; 
+      ['일', '월', '화', '수', '목', '금', '토'].forEach(day => {
+        const div = document.createElement('div'); div.className = 'cal-day-header'; div.innerText = day; grid.appendChild(div);
+      });
+
+      if (isMonthView) {
+        mainCard.classList.remove('expanded'); calendarCard.classList.remove('week-view');
+        document.getElementById('calendarLabel').innerText = '이번 달 달력';
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).getDay();
+        const lastDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+        for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
+        for (let i = 1; i <= lastDate; i++) {
+          const dayDiv = document.createElement('div'); dayDiv.className = 'cal-day'; dayDiv.innerText = i;
+          if (i === today.getDate()) dayDiv.classList.add('today'); grid.appendChild(dayDiv);
+        }
+      } else {
+        mainCard.classList.add('expanded'); calendarCard.classList.add('week-view');
+        document.getElementById('calendarLabel').innerText = '이번 주 달력';
+        const currentWeekStart = new Date(today); currentWeekStart.setDate(today.getDate() - today.getDay());
+        for (let i = 0; i < 7; i++) {
+          const currentDay = new Date(currentWeekStart); currentDay.setDate(currentWeekStart.getDate() + i);
+          const dayDiv = document.createElement('div'); dayDiv.className = 'cal-day'; dayDiv.innerText = currentDay.getDate();
+          if (currentDay.getDate() === today.getDate() && currentDay.getMonth() === today.getMonth()) dayDiv.classList.add('today');
+          grid.appendChild(dayDiv);
+        }
+      }
+    }
+
+    document.getElementById('calendarCard').addEventListener('click', (e) => {
+      isMonthView = !isMonthView;
+      renderCalendar();
+    });
+
+    renderCalendar();
+  </script>
+</body>
+</html>
